@@ -1,0 +1,112 @@
+# Updated Dockerfile for s390x
+FROM ubuntu:22.04
+USER root
+
+# Install necessary dependencies
+RUN apt-get update -y && apt-get install -y \
+    git wget curl vim libnuma-dev libsndfile-dev libprotobuf-dev protobuf-compiler \
+    build-essential ffmpeg libsm6 libxext6 libgl1 python3 python3-pip cmake ninja-build \
+    cargo libjpeg-dev libpng-dev zlib1g-dev libavcodec-dev libavformat-dev libswscale-dev \
+    libtiff-dev libwebp-dev llvm-dev libclang-dev clang libssl-dev g++ \
+    python3-distutils python3-setuptools libbz2-dev liblz4-dev libzstd-dev \
+    libsnappy-dev rapidjson-dev libboost-dev liborc-dev pkg-config autoconf libtool \
+    numactl gfortran libopenblas-dev liblapack-dev
+
+
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+# Install and update Rust
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y && \
+    . "$HOME/.cargo/env" && \
+    rustup default stable && \
+    rustup update
+
+# Build and install Apache Arrow from source
+WORKDIR /tmp/arrow
+RUN git clone https://github.com/apache/arrow.git && \
+    cd arrow/cpp && \
+    mkdir release && cd release && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DARROW_PYTHON=ON \
+          -DARROW_PARQUET=ON \
+          -DARROW_ORC=ON \
+          -DARROW_FILESYSTEM=ON \
+          -DARROW_WITH_LZ4=ON \
+          -DARROW_WITH_ZSTD=ON \
+          -DARROW_WITH_SNAPPY=ON \
+          -DARROW_JSON=ON \
+          -DARROW_CSV=ON \
+          -DPROTOBUF_PROTOC_EXECUTABLE=/usr/bin/protoc \
+          -DARROW_DEPENDENCY_SOURCE=BUNDLED \
+          .. && \
+    make -j$(nproc) && make install
+
+# Set environment variables for Arrow
+ENV CMAKE_PREFIX_PATH=/usr/local/lib/cmake:$CMAKE_PREFIX_PATH
+ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
+# Clone and build PyTorch from source
+WORKDIR /workspace
+RUN git clone https://github.com/pytorch/pytorch.git && \
+    cd pytorch && \
+    git checkout d990dad && \
+    . "$HOME/.cargo/env" && \
+    rustup override set stable && \
+    pip install -r requirements.txt && \
+    python3 setup.py bdist_wheel && \
+    pip install dist/*.whl && \
+    rm -rf dist
+
+# Clone and build torchvision from source
+RUN git clone https://github.com/pytorch/vision.git && \
+    cd vision && \
+    git checkout 48b1edf && \
+    python3 setup.py bdist_wheel && \
+    pip install dist/*.whl && \
+    rm -rf dist
+
+# Install Micromamba for lightweight dependency management
+RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-s390x/latest | tar -xzv -C /usr/local/bin/ --strip-components=1 bin/micromamba || true && \
+    if [ -f /usr/local/bin/micromamba ]; then \
+        /usr/local/bin/micromamba shell init -s bash -r ~/micromamba && source ~/.bashrc; \
+    else \
+        echo "Micromamba installation failed."; \
+    fi
+
+# Create a non-root user and group
+RUN groupadd -r vllm && \
+    useradd --uid 2000 --gid vllm -m -d /home/vllm vllm
+
+# Copy the vLLM repository
+COPY ./ /workspace/vllm
+WORKDIR /workspace/vllm
+
+# Install Python dependencies
+RUN pip install -v \
+    'cmake>=3.26' ninja packaging 'setuptools-scm>=8' wheel jinja2 \
+    -r requirements-cpu.txt \
+    xformers uvloop==0.21.0
+
+# Build and Install vLLM
+RUN VLLM_TARGET_DEVICE=cpu python3 setup.py build_ext --inplace && \
+    VLLM_TARGET_DEVICE=cpu python3 setup.py bdist_wheel && \
+    pip install dist/*.whl && \
+    rm -rf dist
+
+# Set environment variables for runtime
+ENV HF_HUB_OFFLINE=0 \
+    PORT=8000 \
+    HOME=/home/vllm \
+    VLLM_USAGE_SOURCE=production-docker-image \
+    VLLM_WORKER_MULTIPROC_METHOD=fork
+
+# Set permissions for non-root user
+RUN chown -R vllm:vllm /workspace/vllm
+USER vllm
+
+# Entry point for the API server
+ENTRYPOINT ["/usr/bin/python3", "-m", "vllm.entrypoints.openai.api_server"]
+
