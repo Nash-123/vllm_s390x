@@ -3,7 +3,7 @@
 set -ex
 
 # Pull pre-built image
-docker pull docker.io/nishan321/cpu-test:latest
+docker pull docker.io/nishan321/vllm-cpu-optimized:latest
 
 # Run the image
 source /etc/environment
@@ -15,7 +15,7 @@ docker run -itd \
   -e HF_TOKEN="${HF_TOKEN:-}" \
   --name cpu-test1 \
   --replace \
-  nishan321/cpu-test:latest
+  nishan321/vllm-cpu-optimized:latest
 
 function cpu_tests() {
   set -e
