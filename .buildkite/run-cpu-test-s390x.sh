@@ -2,8 +2,13 @@
 
 set -ex
 
-# Pull pre-built image
-docker pull docker.io/nishan321/vllm-cpu-optimized:latest
+# Setup cleanup
+remove_docker_container() { docker rm -f cpu-test || true; docker system prune -f; }
+trap remove_docker_container EXIT
+remove_docker_container
+
+# Try building the docker image
+docker build -t cpu-test -f Dockerfile.s390x .
 
 # Run the image
 source /etc/environment
@@ -13,9 +18,8 @@ docker run -itd \
   --privileged=true \
   --network host \
   -e HF_TOKEN="${HF_TOKEN:-}" \
-  --name cpu-test1 \
-  --replace \
-  nishan321/vllm-cpu-optimized:latest
+  --name cpu-test \
+  cpu-test
 
 function cpu_tests() {
   set -e
@@ -27,7 +31,7 @@ function cpu_tests() {
   fi
 
   # Basic setup and model tests (as root)
-  docker exec --user root cpu-test1 bash -c "
+  docker exec --user root cpu-test bash -c "
     set -e
 
     # Update and install Python3 and pip
@@ -52,13 +56,17 @@ function cpu_tests() {
     echo 'Starting pytest: embedding/language'
     pytest -v -s tests/models/embedding/language -m cpu_model || echo 'Test failed: embedding/language'
 
+    echo 'Starting pytest: encoder-decoder/language'
+    pytest -v -s tests/models/encoder_decoder/language -m cpu_model || echo 'Test failed: encoder decoder/language'
 
+    echo 'Starting pytest: decoder-only-audio-language/language'
+    pytest -v -s tests/models/decoder_only/audio_language -m cpu_model || echo 'Test failed: decoder_only/audio_language/language'
 
     echo 'All tests completed.'
   "
 
   # Online inference (without root)
-  docker exec cpu-test1 bash -c "
+  docker exec cpu-test bash -c "
     set -e
     echo 'Starting the VLLM API server...'
     python3 -m vllm.entrypoints.openai.api_server --model facebook/opt-125m --dtype float &
@@ -69,7 +77,7 @@ function cpu_tests() {
       --backend vllm \
       --dataset-name random \
       --model facebook/opt-125m \
-      --num-prompts 5 \
+      --num-prompts 20 \
       --endpoint /v1/completions \
       --tokenizer facebook/opt-125m || echo 'Benchmark tests failed.' "
 
@@ -77,4 +85,4 @@ function cpu_tests() {
 
 # Run tests with timeout
 export -f cpu_tests
-timeout 200m bash -c "cpu_tests"
+timeout 25m bash -c "cpu_tests"
