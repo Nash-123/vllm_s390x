@@ -60,6 +60,7 @@ find_isa(${CPUINFO} "POWER10" POWER10_FOUND)
 find_isa(${CPUINFO} "POWER9" POWER9_FOUND)
 find_isa(${CPUINFO} "asimd" ASIMD_FOUND) # Check for ARM NEON support
 find_isa(${CPUINFO} "bf16" ARM_BF16_FOUND) # Check for ARM BF16 support
+find_isa(${CPUINFO} "S390" S390_FOUND)
 
 if (AVX512_FOUND AND NOT AVX512_DISABLED)
     list(APPEND CXX_COMPILE_FLAGS
@@ -102,9 +103,21 @@ elseif (ASIMD_FOUND)
         message(WARNING "BF16 functionality is not available")
         set(MARCH_FLAGS "-march=armv8.2-a+dotprod+fp16")  
     endif()
-    list(APPEND CXX_COMPILE_FLAGS ${MARCH_FLAGS})     
+    list(APPEND CXX_COMPILE_FLAGS ${MARCH_FLAGS}) 
+
+elseif(APPLE_SILICON_FOUND)
+    message(STATUS "Apple Silicon Detected")
+    set(ENABLE_NUMA OFF)
+    elseif (S390_FOUND)
+    message(STATUS "S390 detected")
+    # Check for S390 VXE support
+    list(APPEND CXX_COMPILE_FLAGS
+        "-mvx"
+        "-mzvector"
+        "-march=native"
+        "-mtune=native")
 else()
-    message(FATAL_ERROR "vLLM CPU backend requires AVX512, AVX2, Power9+ ISA or ARMv8 support.")
+	message(FATAL_ERROR "vLLM CPU backend requires AVX512, AVX2, Power9+ ISA, S390X ISA or ARMv8 support.")
 endif()
 
 #
