@@ -147,6 +147,7 @@ def _test_processing_correctness(
     "facebook/chameleon-7b",
     "deepseek-ai/deepseek-vl2-tiny",
     "adept/fuyu-8b",
+    "THUDM/glm-4v-9b",
     "h2oai/h2ovl-mississippi-800m",
     "OpenGVLab/InternVL2-1B",
     "HuggingFaceM4/Idefics3-8B-Llama3",
@@ -161,6 +162,7 @@ def _test_processing_correctness(
     "nvidia/NVLM-D-72B",
     "Qwen/Qwen-VL-Chat",
     "Qwen/Qwen2-VL-2B-Instruct",
+    "Qwen/Qwen2.5-VL-3B-Instruct",
     "Qwen/Qwen2-Audio-7B-Instruct",
     "fixie-ai/ultravox-v0_3",
 ])
