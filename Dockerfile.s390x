@@ -32,6 +32,9 @@ RUN microdnf install -y \
 
 FROM python-install AS pyarrow
 
+
+COPY requirements/ /workspace/requirements/
+
 # Build Apache Arrow
 WORKDIR /tmp
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -57,8 +60,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     make install && \
     cd ../../python && \
     export PYARROW_PARALLEL=4 && \
-    export ARROW_BUILD_TYPE=release && \
-    uv pip install -r requirements/build.txt && \
+    export ARROW_BUILD_TYPE=release && \ 
+    sed -i '/^torch/d' /workspace/requirements/build.txt && \
+    uv pip install -r /workspace/requirements/build.txt && \
     python setup.py build_ext --build-type=$ARROW_BUILD_TYPE --bundle-arrow-cpp bdist_wheel
 
 FROM python-install AS numa-build
