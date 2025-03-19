@@ -59,6 +59,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     make -j$(nproc) && \
     make install && \
     cd ../../python && \
+    sed -i 's|"../LICENSE.txt"|"LICENSE.txt"|g' setup.py && \
+    cp ../LICENSE.txt ./ && \
     export PYARROW_PARALLEL=4 && \
     export ARROW_BUILD_TYPE=release && \ 
     sed -i '/^torch/d' /workspace/requirements/build.txt && \
